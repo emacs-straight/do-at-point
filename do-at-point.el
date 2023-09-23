@@ -40,6 +40,8 @@
 ;; use `do-at-point-local-actions' to add additional things and/or
 ;; actions.
 
+;; Inspired by Embark and `isearch-forward-thing-at-point'.
+
 ;;; Code:
 
 (eval-when-compile (require 'pcase))
@@ -326,18 +328,18 @@ instead."
   "Move focus N things ahead.
 By default, this will move one thing ahead."
   (interactive "p")
-  (when (and do-at-point--overlay
-             (overlay-end do-at-point--overlay))
-    (goto-char (overlay-end do-at-point--overlay))
+  (when do-at-point--overlay
+    (when (overlay-end do-at-point--overlay)
+      (goto-char (overlay-end do-at-point--overlay)))
     (forward-thing (overlay-get do-at-point--overlay 'do-at-point-thing) n)))
 
 (defun do-at-point-backward (n)
   "Move focus N things back.
 Refer to the command `do-at-point-forward' for more details."
   (interactive "p")
-  (when (and do-at-point--overlay
-             (overlay-start do-at-point--overlay))
-    (goto-char (overlay-start do-at-point--overlay))
+  (when do-at-point--overlay
+    (when (overlay-start do-at-point--overlay)
+      (goto-char (overlay-start do-at-point--overlay)))
     (forward-thing (overlay-get do-at-point--overlay 'do-at-point-thing)
                    (- (or n 1)))))
 
