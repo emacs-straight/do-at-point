@@ -5,7 +5,7 @@
 ;; Author: Philip Kaludercic <philipk@posteo.net>
 ;; Maintainer: Philip Kaludercic <~pkal/public-inbox@lists.sr.ht>
 ;; URL: https://git.sr.ht/~pkal/do-at-point
-;; Version: 0.1.0
+;; Version: 0.1.1
 ;; Package-Requires: ((emacs "26.1"))
 ;; Keywords: convenience
 
@@ -123,12 +123,20 @@ of this variable.")
      (?* "Calc" ,(lambda () (calc-embedded '(t)))))
     (word
      (?$ "Spell check" ,(lambda () (ispell-word)))
-     (?d "Dictionary" ,#'dictionary-search))
+     (?d "Dictionary" ,#'dictionary-search)
+     (?t "Transpose" ,(lambda () (transpose-words 1))))
     (symbol
      (?. "Xref" ,#'xref-find-definitions)
      (?o "Occur" ,(lambda (str)
                     (occur (concat "\\_<\\(" (regexp-quote str) "\\)\\_>")))))
-    (string) (sexp) (line) (paragraph (?$))
+    (string)
+    (sexp
+     (?t "Transpose" ,(lambda () (transpose-sexps 1))))
+    (line
+     (?t "Transpose" ,(lambda () (transpose-lines 1))))
+    (paragraph
+     (?$)
+     (?t "Transpose" ,(lambda () (transpose-paragraphs 1))))
     (defun
         (?e "Evaluate" ,(lambda () (eval-defun nil)))))
   "Association of things and their respective actions.
