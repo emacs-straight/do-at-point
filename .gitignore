@@ -1,5 +1,0 @@
-*.elc
-*~
-\#*\#
-/do-at-point-pkg.el
-/do-at-point-autoloads.el
