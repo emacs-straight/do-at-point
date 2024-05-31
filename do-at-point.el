@@ -130,19 +130,19 @@ of this variable.")
     (word
      (?$ "Spell check" ,(lambda () (ispell-word)))
      (?d "Dictionary" ,#'dictionary-search)
-     (?t "Transpose" ,(lambda () (transpose-words 1))))
+     (?t "Transpose" ,(lambda () (transpose-words (or current-prefix-arg 1)))))
     (symbol
      (?. "Xref" ,#'xref-find-definitions)
      (?o "Occur" ,(lambda (str)
                     (occur (concat "\\_<\\(" (regexp-quote str) "\\)\\_>")))))
     (string)
     (sexp
-     (?t "Transpose" ,(lambda () (transpose-sexps 1))))
+     (?t "Transpose" ,(lambda () (transpose-sexps (or current-prefix-arg 1)))))
     (line
-     (?t "Transpose" ,(lambda () (transpose-lines 1))))
+     (?t "Transpose" ,(lambda () (transpose-lines (or current-prefix-arg 1)))))
     (paragraph
      (?$)
-     (?t "Transpose" ,(lambda () (transpose-paragraphs 1))))
+     (?t "Transpose" ,(lambda () (transpose-paragraphs (or current-prefix-arg 1)))))
     (defun
         (?e "Evaluate" ,(lambda () (eval-defun nil)))))
   "Association of things and their respective actions.
@@ -229,6 +229,8 @@ invoke `do-at-point' is bound transiently."
                    #'do-at-point--next-thing)
        map))))
 
+(defvar do-at-point-persist-mode)
+
 (defun do-at-point-confirm (&optional quick)
   "Dispatch an action on the current \"thing\" being selected.
 If the optional argument QUICK is non-nil, the first applicable
@@ -254,7 +256,8 @@ action is selected."
          (func (cadr (alist-get (car choice) options)))
          (bound (cons (overlay-start do-at-point--overlay)
                       (overlay-end do-at-point--overlay))))
-    (do-at-point--mode -1)
+    (unless do-at-point-persist-mode
+      (do-at-point--mode -1))
     (when func
       (message nil)               ;clear mini buffer
       (pcase (car (func-arity func))
@@ -277,6 +280,7 @@ See the function `do-at-point-confirm' for more details."
   "Quit the selection mode and defer to \\[keyboard-quit]."
   (interactive)
   (do-at-point--mode -1)
+  (do-at-point-persist-mode -1)
   (keyboard-quit))
 
 (defun do-at-point--applicable-things ()
@@ -315,16 +319,21 @@ value of the function is always the new \"thing\"."
   "Determine the lighter for `do-at-point--mode'.
 The lighter depends on the current \"thing\" being selected."
   (let ((thing (overlay-get do-at-point--overlay 'do-at-point-thing)))
-    (and thing (format " Do-At-Point/%s" thing))))
+    (and thing (format " Do-At-Point/%s%s" thing
+                       (if do-at-point-persist-mode "*" "")))))
 
 (defvar do-at-point--mode-map
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map do-at-point--quick-map)
     (define-key map (kbd "C-<return>") #'do-at-point-confirm*)
+    (define-key map (kbd "M-<return>") #'do-at-point-persist-mode)
     (define-key map [remap keyboard-quit] #'do-at-point-quit)
     (define-key map (kbd "M-n") #'do-at-point-forward)
     (define-key map (kbd "M-p") #'do-at-point-backward)
     map))
+
+(defvar do-at-point-hook '()
+  "Hook run after enabling and disabling `do-at-point' selection.")
 
 (define-minor-mode do-at-point--mode
   "Minor mode that implements the selection for `do-at-point'.
@@ -345,7 +354,14 @@ instead."
     (remove-hook 'post-command-hook #'do-at-point--update t)
     (overlay-put do-at-point--overlay 'do-at-point-thing nil)
     (delete-overlay do-at-point--overlay)
-    (setq do-at-point--overlay nil)))
+    (setq do-at-point--overlay nil))
+  (run-hooks 'do-at-point-hook))
+
+(define-minor-mode do-at-point-persist-mode
+  "Minor mode that inhibits `do-at-point' from disabling itself.
+This is useful if you want to execute multiple actions in sequence,
+without having to re-select the object repeatedly."
+  :global nil)
 
 (defun do-at-point-forward (n)
   "Move focus N things ahead.
