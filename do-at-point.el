@@ -92,6 +92,8 @@ but not `do-at-point-user-actions'.  Refer to the user option
 `do-at-point-actions' for details on the structure of the values
 of this variable.")
 
+(declare-function gnus-dired-attach "gnus-dired" (files-to-attach))
+
 (defcustom do-at-point-actions
   `((region
      (?\s "Mark" ,(lambda (start end)
@@ -110,6 +112,8 @@ of this variable.")
               (write-region beg end file))))
      (?k "Kill" ,#'kill-region)
      (?n "Narrow" ,#'narrow-to-region)
+     (?g "Grep" ,(lambda (str)
+                   (rgrep (regexp-quote str) "*" ".")))
      (?$ "Spell check" ,#'ispell-region)
      (?| "Pipe command"
          ,(lambda (beg end)
@@ -135,11 +139,17 @@ of this variable.")
      (?m "Compose message" ,(lambda (to) (compose-mail to))))
     (existing-filename
      (?f "Find file" ,#'find-file)
-     (?4 "Find file other window" ,#'find-file-other-window))
+     (?4 "Find file other window" ,#'find-file-other-window)
+     (?a "Attach to message"
+         ,(lambda (path)
+            (require 'gnus-dired)
+            (gnus-dired-attach (list path)))))
     (url
      (?b "Browse" ,#'browse-url)
      (?d "Download" ,#'(lambda (url)
                          (start-process "*Download*" nil "wget" "-q" "-c" url)))
+     (?G "Git" ,#'(lambda (url)
+                    (start-process "*Git*" nil "git" "clone" url "/tmp/")))
      (?e "eww" ,#'eww-browse-url))
     (number
      (?* "Calc" ,(lambda () (calc-embedded '(t)))))
