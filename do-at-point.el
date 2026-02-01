@@ -1,11 +1,11 @@
 ;;; do-at-point.el --- Generic context-sensitive action dispatcher.  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2023, 2024, 2025  Free Software Foundation, Inc.
+;; Copyright (C) 2023, 2024, 2025, 2026  Free Software Foundation, Inc.
 
 ;; Author: Philip Kaludercic <philipk@posteo.net>
 ;; Maintainer: Philip Kaludercic <philipk@posteo.net>
 ;; URL: https://codeberg.org/pkal/do-at-point.el
-;; Version: 0.1.2
+;; Version: 0.2.0-pre
 ;; Package-Requires: ((emacs "26.1"))
 ;; Keywords: convenience
 
@@ -44,19 +44,17 @@
 
 ;;; News:
 
-;;;; Version 0.1.2
+;;;; Version 0.2.0
 
-;; - New general actions: "delete-region" and "yank-and-swap".
-;;
-;; - New hook `do-at-point-mode-hook'.
-;;
-;; - New minor mode `do-at-point-persist-mode', bound to M-<return> by
-;;   default.  If enabled, it disables the disactivation of selections
-;;   after an action.  To enable it by default, evaluate
-;;
-;;     (add-hook 'do-at-point-hook #'do-at-point-persist-mode)
-;;
-;; - Allow customising the quick-confirm key (by Visuwesh).
+;; - Add new command `do-at-point-dwim'.  It will automatically run
+;;   the first action on the first thing `do-at-point' would select.
+;;   With a prefix argument, you can inspect what that action would
+;;   be.
+;; - Add new action on URLs to clone Git repositories into /tamp/
+;; - Add new action to attach files to Gnus
+;; - Add new action to run "rgrep" on some text
+;; - Add new action to integrate Iedit (if installed)
+;; - Prioritise matching symbols before words in the cycle order
 
 ;;; Code:
 
@@ -134,7 +132,12 @@ of this variable.")
             (let ((str (delete-and-extract-region start end)))
               (insert-for-yank (current-kill 0))
               (kill-new str t))))
-     (?\C-? "Delete" ,#'delete-region))
+     (?\C-? "Delete" ,#'delete-region)
+     ,@(and (fboundp 'iedit-mode)
+            `((?i "Iedit" ,(lambda (start end)
+                             (set-mark start)
+                             (goto-char end)
+                             (funcall-interactively 'iedit-mode))))))
     (email
      (?m "Compose message" ,(lambda (to) (compose-mail to))))
     (existing-filename
@@ -147,20 +150,31 @@ of this variable.")
     (url
      (?b "Browse" ,#'browse-url)
      (?d "Download" ,#'(lambda (url)
-                         (start-process "*Download*" nil "wget" "-q" "-c" url)))
-     (?G "Git" ,#'(lambda (url)
-                    (start-process "*Git*" nil "git" "clone" url "/tmp/")))
+                         (cond
+                          ((executable-find "wget")
+                           (start-process "*Download*" nil "wget" "-q" "-c" url))
+                          ((executable-find "wcurl")
+                           (start-process "*Download*" nil "wcurl" url))
+                          ;; FIXME: We should also try falling back to
+                          ;; `url-retrieve'.
+                          ((error "Failed to find external executable for downloads")))))
+     (?g "git-clone into temp"
+         ,(lambda (url)
+            (let ((dir (make-temp-file (file-name-base url) t))
+                  (default-directory temporary-file-directory))
+              (call-process "git" nil nil nil "clone" url dir)
+              (find-file-other-window dir))))
      (?e "eww" ,#'eww-browse-url))
     (number
      (?* "Calc" ,(lambda () (calc-embedded '(t)))))
-    (word
-     (?$ "Spell check" ,(lambda () (ispell-word)))
-     (?d "Dictionary" ,#'dictionary-search)
-     (?t "Transpose" ,(lambda () (transpose-words (or current-prefix-arg 1)))))
     (symbol
      (?. "Xref" ,#'xref-find-definitions)
      (?o "Occur" ,(lambda (str)
                     (occur (concat "\\_<\\(" (regexp-quote str) "\\)\\_>")))))
+    (word
+     (?$ "Spell check" ,(lambda () (ispell-word)))
+     (?d "Dictionary" ,#'dictionary-search)
+     (?t "Transpose" ,(lambda () (transpose-words (or current-prefix-arg 1)))))
     (string)
     (sexp
      (?t "Transpose" ,(lambda () (transpose-sexps (or current-prefix-arg 1)))))
@@ -257,10 +271,11 @@ invoke `do-at-point' is bound transiently."
 
 (defvar do-at-point-persist-mode)
 
-(defun do-at-point-confirm (&optional quick)
+(defun do-at-point-confirm (&optional quick dry-run)
   "Dispatch an action on the current \"thing\" being selected.
-If the optional argument QUICK is non-nil, the first applicable
-action is selected."
+If the optional argument QUICK is non-nil, the first applicable action
+is selected.  If DRY-RUN is non-nil, then only display the name of the
+selected action."
   (interactive)
   (unless (and do-at-point--overlay
                (overlay-start do-at-point--overlay)
@@ -287,6 +302,8 @@ action is selected."
     (when func
       (message nil)               ;clear mini buffer
       (pcase (car (func-arity func))
+        ((guard dry-run)
+         (message "Would do: %s on %s" (cadr choice) thing))
         (0 (funcall func))
         (1 (funcall func (buffer-substring (car bound) (cdr bound))))
         (2 (funcall func (car bound) (cdr bound)))
@@ -378,8 +395,9 @@ instead."
         (setq do-at-point--overlay ov)
         (do-at-point--update))
     (remove-hook 'post-command-hook #'do-at-point--update t)
-    (overlay-put do-at-point--overlay 'do-at-point-thing nil)
-    (delete-overlay do-at-point--overlay)
+    (when do-at-point--overlay
+      (overlay-put do-at-point--overlay 'do-at-point-thing nil)
+      (delete-overlay do-at-point--overlay))
     (setq do-at-point--overlay nil))
   (run-hooks 'do-at-point-hook))
 
@@ -428,6 +446,20 @@ selected."
   (do-at-point--mode 1))
 
 ;;;###autoload (put 'do-at-point 'setup-func 'do-at-point)
+
+;;;###autoload
+(defun do-at-point-dwim (dry-run)
+  "Immediately execute first action for the first thing at point.
+If invoked with a prefix argument (or non-interactively with a non-nil
+value for DRY-RUN), then this command will only display the name of the
+action it would perform."
+  (interactive "P")
+  (unwind-protect
+      (let ((do-at-point-persist-mode nil))
+        (do-at-point--mode 1)
+        (do-at-point-confirm t dry-run))
+    (when do-at-point--mode
+      (do-at-point--mode -1))))
 
 (provide 'do-at-point)
 ;;; do-at-point.el ends here
