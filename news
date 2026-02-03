@@ -9,3 +9,5 @@ Version 0.2.0
 - Add new action to run "rgrep" on some text
 - Add new action to integrate Iedit (if installed)
 - Prioritise matching symbols before words in the cycle order
+- Improve robustness of `do-at-point-forward' and
+  `do-at-point-backward'.
