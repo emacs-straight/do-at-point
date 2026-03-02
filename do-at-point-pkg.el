@@ -1,2 +1,2 @@
-;; Generated package description from do-at-point.el  -*- no-byte-compile: t -*-
-(define-package "do-at-point" "0.2.0.0.20260203.162636" "Generic context-sensitive action dispatcher." '((emacs "26.1")) :commit "abdc992088f552d4dbc649955b0911f15418aead" :authors '(("Philip Kaludercic" . "philipk@posteo.net")) :maintainer '("Philip Kaludercic" . "philipk@posteo.net") :keywords '("convenience") :url "https://codeberg.org/pkal/do-at-point.el")
+;; Generated package description from do-at-point.el  -*- no-byte-compile: t; lexical-binding:t -*-
+(define-package "do-at-point" "0.2.0.0.20260301.164322" "Generic context-sensitive action dispatcher." '((emacs "26.1")) :commit "80dc74a8824b8332681fe10a6ca5fefece6eb9e0" :authors '(("Philip Kaludercic" . "philipk@posteo.net")) :maintainer '("Philip Kaludercic" . "philipk@posteo.net") :keywords '("convenience") :url "https://codeberg.org/pkal/do-at-point.el")
