@@ -151,21 +151,17 @@ of this variable.")
          ,(lambda (path)
             (require 'gnus-dired)
             (gnus-dired-attach (list path)))))
-    (filename
-     (?d "Dired" ,(lambda (file)
-                    (let ((default-directory (file-name-directory file)))
-                      (dired-jump nil file)))))
     (url
      (?b "Browse" ,#'browse-url)
-     (?d "Download" ,#'(lambda (url)
-                         (cond
-                          ((executable-find "wget")
-                           (start-process "*Download*" nil "wget" "-q" "-c" url))
-                          ((executable-find "wcurl")
-                           (start-process "*Download*" nil "wcurl" url))
-                          ;; FIXME: We should also try falling back to
-                          ;; `url-retrieve'.
-                          ((error "Failed to find external executable for downloads")))))
+     (?d "Download" ,(lambda (url)
+                       (cond
+                        ((executable-find "wget")
+                         (start-process "*Download*" nil "wget" "-q" "-c" url))
+                        ((executable-find "wcurl")
+                         (start-process "*Download*" nil "wcurl" url))
+                        ;; FIXME: We should also try falling back to
+                        ;; `url-retrieve'.
+                        ((error "Failed to find external executable for downloads")))))
      (?g "git-clone into temp"
          ,(lambda (url)
             (let ((dir (make-temp-file (file-name-base url) t))
@@ -186,6 +182,10 @@ of this variable.")
     (string)
     (sexp
      (?t "Transpose" ,(lambda () (transpose-sexps (or current-prefix-arg 1)))))
+    (filename
+     (?f . existing-filename)
+     (?4 . existing-filename)
+     (?d . existing-filename))
     (line
      (?t "Transpose" ,(lambda () (transpose-lines (or current-prefix-arg 1)))))
     (paragraph
@@ -204,14 +204,15 @@ interpret as function that is invoked without any arguments, or
 with a buffer substring or the bounds of THING.  Actions listed
 under the \"thing\" `region' are shared among all \"things\".  An
 entry in ACTIONS can omit NAME and FUNC, and it will instead
-fallback into the entry for `region'.  This is why a an entry
-does not require any actions to be associated with it, if it just
-serves as a specific kind of region worth selecting.  The order
-of element in the list correspond to the order in which
-`do-at-point' will prompt the user for possible things at point.
-Note that the user option `do-at-point-user-actions' and the
-variable `do-at-point-local-actions' take precedence over this
-user option."
+fallback into the entry for `region'.  If an element of ACTIONS has
+the form (KEY . THING), it it will fall back to the entry of KEY in
+THING instead of `region'.  This is why a an entry does not require
+any actions to be associated with it, if it just serves as a
+specific kind of region worth selecting.  The order of element in
+the list correspond to the order in which `do-at-point' will prompt
+the user for possible things at point.  Note that the user option
+`do-at-point-user-actions' and the variable
+`do-at-point-local-actions' take precedence over this user option."
   :type do-at-point--actions-type)
 
 (defcustom do-at-point-quick-bindings t
@@ -238,22 +239,24 @@ The function consults `do-at-point-user-actions',
 `do-at-point-local-actions' and the user option
 `do-at-point-actions' in this order and inherits actions from
 more to less specific entries."
-  (seq-reduce
-   (lambda (accum ent)
-     (let ((prev (assq (car ent) accum)))
-       (cons (list (car ent)
-                   (or (cadr ent) (cadr prev))
-                   (or (caddr ent) (caddr prev))
-                   (or (cadddr ent) (cadddr prev)))
-             (delq prev accum))))
-   (reverse (append
-             (alist-get thing do-at-point-user-actions)
-             (alist-get 'region do-at-point-user-actions)
-             (alist-get thing do-at-point-local-actions)
-             (alist-get 'region do-at-point-local-actions)
-             (alist-get thing do-at-point-actions)
-             (alist-get 'region do-at-point-actions)))
-   '()))
+  (mapcan
+   (lambda (ent)
+     (pcase-exhaustive ent
+       (`(,key . ,(and (pred symbolp) thing))
+        (list (assoc key (do-at-point--actions (or thing 'region)))))
+       (`(,key ,desc ,func)
+        (and key desc func
+             (list (list key desc func))))))
+   (append
+    (and (not (eq thing 'region))
+         (alist-get thing do-at-point-actions))
+    (alist-get 'region do-at-point-actions)
+    (and (not (eq thing 'region))
+         (alist-get thing do-at-point-local-actions))
+    (alist-get 'region do-at-point-local-actions)
+    (and (not (eq thing 'region))
+         (alist-get thing do-at-point-user-actions))
+    (alist-get 'region do-at-point-user-actions))))
 
 (defvar-local do-at-point--overlay nil
   "Buffer-local overlay object to display the selection overlay.
